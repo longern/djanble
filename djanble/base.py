@@ -1,6 +1,7 @@
 import re
 from itertools import chain
 
+import sqlparse
 import tablestore
 from django.db.backends.base.base import BaseDatabaseWrapper
 from django.db.backends.base.client import BaseDatabaseClient
@@ -67,14 +68,17 @@ class Cursor:
         self.result = iter(result)
 
     def insert(self, sql: str, params):
-        insert_match = re.match('INSERT INTO "([^ ]*)" \([^)]*\) VALUES \(.*\)$', sql)
-        if not insert_match:
-            raise ValueError(sql)
+        (stmt,) = sqlparse.parse(sql)
 
-        table_name = insert_match.groups()[0]
+        table_name: str = stmt.tokens[4].get_name()
+        column_tokens = stmt.tokens[6].tokens[1].tokens
+        columns = [token.get_name() for token in column_tokens if isinstance(token, sqlparse.sql.Identifier)]
+
         primary_keys = [("_partition", 0), ("id", tablestore.PK_AUTO_INCR)]
         consumed, return_row = self.conn.put_row(
-            table_name, tablestore.Row(primary_keys, []), return_type=tablestore.ReturnType.RT_PK,
+            table_name,
+            tablestore.Row(primary_keys, list(zip(columns, params))),
+            return_type=tablestore.ReturnType.RT_PK,
         )
 
         self.lastrowid = row_as_dict(return_row)["id"]
