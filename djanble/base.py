@@ -192,8 +192,10 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     def create_cursor(self, name) -> None:
         return Cursor(self.conn)
 
+    def rollback(self) -> None:
+        self.needs_rollback = False
+
     init_connection_state = do_nothing
     set_autocommit = do_nothing
     commit = do_nothing
-    rollback = do_nothing
     close = do_nothing
