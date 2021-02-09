@@ -68,6 +68,9 @@ class Cursor:
         self.result = iter(result)
 
     def insert(self, sql: str, params):
+        if hasattr(params, "__iter__"):
+            params = tuple(bytearray(param) if isinstance(param, memoryview) else param for param in params)
+
         (stmt,) = sqlparse.parse(sql)
 
         table_name: str = stmt.tokens[4].get_name()
@@ -75,9 +78,10 @@ class Cursor:
         columns = [token.get_name() for token in column_tokens if isinstance(token, sqlparse.sql.Identifier)]
 
         primary_keys = [("_partition", 0), ("id", tablestore.PK_AUTO_INCR)]
+        attribute_columns = [(column, param) for column, param in zip(columns, params) if param is not None]
         consumed, return_row = self.conn.put_row(
             table_name,
-            tablestore.Row(primary_keys, list(zip(columns, params))),
+            tablestore.Row(primary_keys, attribute_columns),
             return_type=tablestore.ReturnType.RT_PK,
         )
 
@@ -85,6 +89,9 @@ class Cursor:
         self.rowcount = 1
 
     def update(self, sql: str, params):
+        if hasattr(params, "__iter__"):
+            params = tuple(bytearray(param) if isinstance(param, memoryview) else param for param in params)
+
         update_match = re.match('UPDATE "([^ ]*)" SET ((?:"(?:[^"]*)" = (?:%s|NULL),? )+)WHERE ".*"\."id" = %s$', sql)
         if not update_match:
             raise ValueError(sql)
@@ -95,12 +102,7 @@ class Cursor:
         for assignment_expr in update_match.groups()[1].split(","):
             lhs, rhs = assignment_expr.strip().split(" = ")
             if rhs == "%s":
-                param = next(params_iter)
-                if isinstance(param, memoryview):
-                    param = bytearray(param)
-                assignments[lhs.strip('"')] = param
-            elif rhs.upper() == "NULL":
-                assignments[lhs.strip('"')] = None
+                assignments[lhs.strip('"')] = next(params_iter)
 
         table_name = update_match.groups()[0]
         primary_keys = [("_partition", 0), ("id", params[-1])]
