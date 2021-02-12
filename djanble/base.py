@@ -34,6 +34,7 @@ def run_any_select(conn: tablestore.OTSClient, sql: str, params):
     from pandasql import sqldf
 
     logging.warning("Complex SQL detected. Fetching all data...")
+    logging.warning(sql)
 
     table_names = re.findall('(?:FROM|JOIN) "([^ ]*)"', sql, re.IGNORECASE)
 
@@ -173,7 +174,10 @@ class Cursor:
         return ret
 
     def fetchone(self):
-        return next(self.result)
+        try:
+            return next(self.result)
+        except StopIteration:
+            return None
 
     close = do_nothing
 
@@ -231,4 +235,5 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     init_connection_state = do_nothing
     set_autocommit = do_nothing
     commit = do_nothing
+    validate_no_broken_transaction = do_nothing
     close = do_nothing
