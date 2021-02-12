@@ -1,3 +1,4 @@
+import logging
 import re
 from itertools import chain
 
@@ -28,6 +29,31 @@ def row_as_dict(row: tablestore.Row) -> dict:
     return row_dict
 
 
+def run_any_select(conn: tablestore.OTSClient, sql: str, params):
+    import pandas as pd
+    from pandasql import sqldf
+
+    logging.warning("Complex SQL detected. Fetching all data...")
+
+    table_names = re.findall('(?:FROM|JOIN) "([^ ]*)"', sql, re.IGNORECASE)
+
+    env = {}
+    for table_name in table_names:
+        consumed, next_primary_key, row_list, _ = conn.get_range(
+            table_name,
+            "FORWARD",
+            [("_partition", 0), ("id", tablestore.INF_MIN)],
+            [("_partition", 0), ("id", tablestore.INF_MAX)],
+        )
+        table = pd.DataFrame([row_as_dict(row) for row in row_list])
+        env[table_name] = table
+        # PandaSQL cannot handle table names with quotes
+        sql = sql.replace(f'"{table_name}"', table_name)
+
+    result = sqldf(sql % tuple(repr(param) for param in params), env)
+    return list(result.itertuples(index=False, name=None))
+
+
 class Cursor:
     def __init__(self, conn):
         self.conn: tablestore.OTSClient = conn
@@ -37,14 +63,18 @@ class Cursor:
         sql = re.sub(" ORDER BY [^ ]*( (ASC|DESC))?$", "", sql)
         select_match = re.match('SELECT (.*) FROM "([^ ]*)"(?: WHERE ".*"\."(.*)" = %s)?$', sql)
         if not select_match:
-            raise ValueError("Statement not supported", sql)
+            self.result = iter(run_any_select(self.conn, sql, params))
+            return
+
         table_name = select_match.groups()[1]
         columns = [re.sub(".*\.", "", column)[1:-1] for column in select_match.groups()[0].split(", ")]
         condition_column = select_match.groups()[2]
         if condition_column == "id":
+            # Get row by id
             _, row, _ = self.conn.get_row(table_name, [("_partition", 0), ("id", params[0])])
             row_list = [row] if row else []
         elif condition_column:
+            # Find from index table
             consumed, next_primary_key, row_list, _ = self.conn.get_range(
                 f"ix_{table_name}_{condition_column}",
                 "FORWARD",
@@ -52,6 +82,7 @@ class Cursor:
                 [(condition_column, params[0]), ("_partition", 0), ("id", tablestore.INF_MAX)],
             )
         else:
+            # Find from main table
             consumed, next_primary_key, row_list, _ = self.conn.get_range(
                 table_name,
                 "FORWARD",
