@@ -47,6 +47,10 @@ def run_any_select(conn: tablestore.OTSClient, sql: str, params):
             [("_partition", 0), ("id", tablestore.INF_MAX)],
         )
         table = pd.DataFrame([row_as_dict(row) for row in row_list])
+        if table.empty:
+            table_meta = conn.describe_table(table_name).table_meta
+            columns = [column[0] for column in chain(table_meta.schema_of_primary_key, table_meta.defined_columns)]
+            table = pd.DataFrame(columns=columns)
         env[table_name] = table
         # PandaSQL cannot handle table names with quotes
         sql = sql.replace(f'"{table_name}"', table_name)
@@ -197,6 +201,7 @@ class DatabaseOperations(BaseDatabaseOperations):
 class DatabaseFeatures(BaseDatabaseFeatures):
     uses_savepoints = False
     atomic_transactions = False
+    has_bulk_insert = False
 
 
 class DatabaseWrapper(BaseDatabaseWrapper):
