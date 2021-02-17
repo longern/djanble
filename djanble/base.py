@@ -15,6 +15,7 @@ from django.db.backends.sqlite3.base import (
     Database,
     DatabaseWrapper as Sqlite3DatabaseWrapper,
 )
+from django.utils.dateparse import parse_datetime
 
 
 def do_nothing(*args, **kwargs):
@@ -25,6 +26,10 @@ def row_as_dict(row: tablestore.Row) -> dict:
     row_dict = {}
     for item in chain(row.primary_key, row.attribute_columns):
         key, value, *_ = item
+        if isinstance(value, str):
+            value_datetime = parse_datetime(value)
+            if value_datetime:
+                value = value_datetime
         row_dict[key] = value
     return row_dict
 
