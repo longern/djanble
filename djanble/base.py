@@ -61,7 +61,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         self.conn = tablestore.OTSClient(**conn_params)
         return self.conn
 
-    def create_cursor(self, name) -> None:
+    def create_cursor(self, name=None) -> Cursor:
         return Cursor(self.conn)
 
     def rollback(self) -> None:

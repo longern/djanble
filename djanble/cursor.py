@@ -54,15 +54,15 @@ class Cursor:
         self.conn: tablestore.OTSClient = conn
 
     def select(self, sql, params):
-        sql = re.sub(" LIMIT \d*$", "", sql)
+        sql = re.sub(" LIMIT \\d*$", "", sql)
         sql = re.sub(" ORDER BY [^ ]*( (ASC|DESC))?$", "", sql)
-        select_match = re.match('SELECT (.*) FROM "([^ ]*)"(?: WHERE ".*"\."(.*)" = %s)?$', sql)
+        select_match = re.match('SELECT (.*) FROM "([^ ]*)"(?: WHERE ".*"\\."(.*)" = %s)?$', sql)
         if not select_match:
             self.result = iter(run_any_select(self.conn, sql, params))
             return
 
         table_name = select_match.groups()[1]
-        columns = [re.sub(".*\.", "", column)[1:-1] for column in select_match.groups()[0].split(", ")]
+        columns = [re.sub(".*\\.", "", column)[1:-1] for column in select_match.groups()[0].split(", ")]
         condition_column = select_match.groups()[2]
         if condition_column == "id":
             # Get row by id
@@ -118,7 +118,7 @@ class Cursor:
         if hasattr(params, "__iter__"):
             params = tuple(bytearray(param) if isinstance(param, memoryview) else param for param in params)
 
-        update_match = re.match('UPDATE "([^ ]*)" SET ((?:"(?:[^"]*)" = (?:%s|NULL),? )+)WHERE ".*"\."id" = %s$', sql)
+        update_match = re.match('UPDATE "([^ ]*)" SET ((?:"(?:[^"]*)" = (?:%s|NULL),? )+)WHERE ".*"\\."id" = %s$', sql)
         if not update_match:
             raise ValueError(sql)
 
@@ -138,7 +138,7 @@ class Cursor:
         self.rowcount = 1
 
     def delete(self, sql: str, params):
-        delete_match = re.match('DELETE FROM "([^ ]*)" WHERE ".*"\."id" = %s$', sql)
+        delete_match = re.match('DELETE FROM "([^ ]*)" WHERE ".*"\\."id" = %s$', sql)
         if not delete_match:
             raise ValueError(sql)
 
