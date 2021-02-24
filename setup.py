@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import find_packages, setup
 
 from djanble import __version__
 
@@ -11,7 +11,7 @@ setup(
     description="Django tablestore database backend",
     keywords="django tablestore",
     license="MIT",
-    packages=["djanble"],
+    packages=find_packages(include=("djanble", "djanble.*")),
     include_package_data=True,
     classifiers=[
         "Intended Audience :: Developers",
@@ -23,5 +23,8 @@ setup(
         "License :: OSI Approved :: MIT License",
     ],
     python_requires=">=3.6",
-    install_requires=["django>=2.1",],
+    install_requires=[
+        "django>=2.1",
+        "pandasql",
+    ],
 )
