@@ -12,7 +12,6 @@ setup(
     keywords="django tablestore",
     license="MIT",
     packages=find_packages(include=("djanble", "djanble.*")),
-    include_package_data=True,
     classifiers=[
         "Intended Audience :: Developers",
         "Programming Language :: Python :: 3",
