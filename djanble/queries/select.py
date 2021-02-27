@@ -1,6 +1,7 @@
 import logging
 import re
 from itertools import chain
+from typing import List
 
 import tablestore
 from django.utils.dateparse import parse_datetime
@@ -18,34 +19,50 @@ def row_as_dict(row: tablestore.Row) -> dict:
     return row_dict
 
 
-def run_any_select(conn: tablestore.OTSClient, sql: str, params):
-    import pandas as pd
-    from pandasql import sqldf
+def run_any_select(conn: tablestore.OTSClient, sql: str, params) -> list:
+    import sqlite3
 
     logging.warning("Complex SQL detected. Fetching all data...")
     logging.warning(sql)
 
+    sqlite_conn = sqlite3.connect(":memory:")
+    cursor = sqlite_conn.cursor()
+
+    column_type_mapping = {
+        "STRING": "text",
+        "INTEGER": "bigint",
+        "BOOLEAN": "boolean",
+    }
+
     table_names = re.findall('(?:FROM|JOIN) "([^ ]*)"', sql, re.IGNORECASE)
-
-    env = {}
     for table_name in table_names:
-        consumed, next_primary_key, row_list, _ = conn.get_range(
-            table_name,
-            "FORWARD",
-            [("_partition", 0), ("id", tablestore.INF_MIN)],
-            [("_partition", 0), ("id", tablestore.INF_MAX)],
+        # Create table in sqlite
+        table_meta = conn.describe_table(table_name).table_meta
+        columns = list(chain(table_meta.schema_of_primary_key, table_meta.defined_columns))
+        column_tokens = ", ".join(
+            f'"{column_name}" {column_type_mapping[column_type]}' for column_name, column_type, *_ in columns
         )
-        table = pd.DataFrame([row_as_dict(row) for row in row_list])
-        if table.empty:
-            table_meta = conn.describe_table(table_name).table_meta
-            columns = [column[0] for column in chain(table_meta.schema_of_primary_key, table_meta.defined_columns)]
-            table = pd.DataFrame(columns=columns)
-        env[table_name] = table
-        # PandaSQL cannot handle table names with quotes
-        sql = sql.replace(f'"{table_name}"', table_name)
+        cursor.execute(f"CREATE TABLE {table_name}({column_tokens})")
 
-    result = sqldf(sql % tuple(repr(param) for param in params), env)
-    return list(result.itertuples(index=False, name=None))
+        primary_key = [("_partition", 0), ("id", tablestore.INF_MIN)]
+        rows: List[tablestore.Row] = []
+        while primary_key:
+            consumed, primary_key, row_list, _ = conn.get_range(
+                table_name,
+                "FORWARD",
+                primary_key,
+                [("_partition", 0), ("id", tablestore.INF_MAX)],
+            )
+            rows.extend(row_list)
+
+        placeholder_tokens = ", ".join(["?"] * len(columns))
+        for row in rows:
+            row_dict = row_as_dict(row)
+            row_values = [row_dict.get(column_name, None) for column_name, *_ in columns]
+            cursor.execute(f'INSERT INTO "{table_name}" VALUES ({placeholder_tokens})', row_values)
+
+    cursor.execute(sql.replace("%s", "?"), params)
+    return cursor.fetchall()
 
 
 def execute(conn: tablestore.OTSClient, sql: str, params):
@@ -53,7 +70,8 @@ def execute(conn: tablestore.OTSClient, sql: str, params):
     sql = re.sub(" ORDER BY [^ ]*( (ASC|DESC))?$", "", sql)
     select_match = re.match('SELECT (.*) FROM "([^ ]*)"(?: WHERE ".*"\\."(.*)" = %s)?$', sql)
     if not select_match:
-        return {"result": iter(run_any_select(conn, sql, params))}
+        result = run_any_select(conn, sql, params)
+        return {"rowcount": len(result), "result": iter(result)}
 
     table_name = select_match.groups()[1]
     columns = [re.sub(".*\\.", "", column)[1:-1] for column in select_match.groups()[0].split(", ")]

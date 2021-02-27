@@ -24,6 +24,5 @@ setup(
     python_requires=">=3.6",
     install_requires=[
         "django>=2.1",
-        "pandasql",
     ],
 )
