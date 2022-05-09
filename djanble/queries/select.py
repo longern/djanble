@@ -25,13 +25,16 @@ def run_any_select(conn: tablestore.OTSClient, sql: str, params) -> list:
     logging.warning("Complex SQL detected. Fetching all data...")
     logging.warning(sql)
 
+    # Run query with sqlite3
     sqlite_conn = sqlite3.connect(":memory:")
     cursor = sqlite_conn.cursor()
 
+    # Mapping from tablestore type to sqlite type
     column_type_mapping = {
         "STRING": "text",
         "INTEGER": "bigint",
         "BOOLEAN": "boolean",
+        "BINARY": "blob",
     }
 
     table_names = re.findall('(?:FROM|JOIN) "([^ ]*)"', sql, re.IGNORECASE)
