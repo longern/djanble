@@ -69,20 +69,48 @@ def run_any_select(conn: tablestore.OTSClient, sql: str, params) -> list:
 
 
 def execute(conn: tablestore.OTSClient, sql: str, params):
-    sql = re.sub(" LIMIT \\d*$", "", sql)
-    sql = re.sub(" ORDER BY [^ ]*( (ASC|DESC))?$", "", sql)
-    select_match = re.match('SELECT (.*) FROM "([^ ]*)"(?: WHERE ".*"\\."(.*)" = %s)?$', sql)
-    if not select_match:
+    try:
+        sql = re.sub(" LIMIT \\d*$", "", sql)
+        sql = re.sub(" ORDER BY [^ ]*( (ASC|DESC))?$", "", sql)
+        select_match = re.match('SELECT (.*) FROM "([^ ]*)"(.*)$', sql)
+        if not select_match:
+            raise ValueError()
+
+        if not select_match.group(3):
+            condition_column = None
+        else:
+            where_match = re.match(' WHERE ".*?"\\."(.*?)" (.*)', select_match.group(3))
+            if not where_match:
+                raise ValueError()
+
+            condition_column = where_match.group(1)
+            if not re.match("(= %s)|(IN \\(%s(, ?%s)*\\))$", where_match.group(2)):
+                raise ValueError()
+
+    except ValueError:
         result = run_any_select(conn, sql, params)
         return {"rowcount": len(result), "result": iter(result)}
 
-    table_name = select_match.groups()[1]
-    columns = [re.sub(".*\\.", "", column)[1:-1] for column in select_match.groups()[0].split(", ")]
-    condition_column = select_match.groups()[2]
-    if condition_column == "id":
+    table_name = select_match.group(2)
+    columns = [re.sub(".*\\.", "", column)[1:-1] for column in select_match.group(1).split(", ")]
+    if condition_column == "id" and len(params) == 1:
         # Get row by id
         _, row, _ = conn.get_row(table_name, [("_partition", 0), ("id", params[0])])
         row_list = [row] if row else []
+    elif condition_column == "id" and len(params) > 1:
+        # Batch get row by id
+        request = tablestore.BatchGetRowRequest()
+        request.add(
+            tablestore.TableInBatchGetRowItem(
+                table_name,
+                [[("_partition", 0), ("id", param)] for param in params],
+                max_version=1
+            )
+        )
+
+        response = conn.batch_get_row(request)
+        table_result = response.get_result_by_table(table_name)
+        row_list = [item.row for item in table_result if item.is_ok and item.row]
     elif condition_column:
         # Find from index table
         consumed, next_primary_key, row_list, _ = conn.get_range(
@@ -92,7 +120,7 @@ def execute(conn: tablestore.OTSClient, sql: str, params):
             [(condition_column, params[0]), ("_partition", 0), ("id", tablestore.INF_MAX)],
         )
     else:
-        # Find from main table
+        # Get all from main table
         consumed, next_primary_key, row_list, _ = conn.get_range(
             table_name,
             "FORWARD",
