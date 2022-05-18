@@ -7,6 +7,10 @@ import tablestore
 from django.utils.dateparse import parse_datetime
 
 
+class NotSupportedError(Exception):
+    pass
+
+
 def row_as_dict(row: tablestore.Row) -> dict:
     row_dict = {}
     for item in chain(row.primary_key, row.attribute_columns):
@@ -68,31 +72,43 @@ def run_any_select(conn: tablestore.OTSClient, sql: str, params) -> list:
     return cursor.fetchall()
 
 
+def parse_select(sql: str):
+    sql_regexp = (
+        r"\s*SELECT\s+(?P<columns>\S*(?:, \S*)*?)"
+        r'\s+FROM\s+"(?P<table>\S*?)"'
+        r"(?:\s+WHERE\s+(?P<condition>.*?))?"
+        r"(?:\s+ORDER\s+BY\s+(?P<order_column>\S*)(?:\s+(?P<order_direction>ASC|DESC))?)?"
+        r"(?:\s+LIMIT\s+(?P<limit>\d+))?"
+        r"\s*$"
+    )
+    select_match = re.match(sql_regexp, sql, re.IGNORECASE)
+    if not select_match:
+        raise NotSupportedError(sql)
+
+    groupdict = select_match.groupdict()
+    groupdict["columns"] = re.split(r",\s*", groupdict["columns"])
+
+    if groupdict["condition"]:
+        condition_regexp = r'"\S+"\."(?P<condition_column>\S+)"\s+(?P<operator>=|IN)\s+\(?%s*(?:\s,\s+%s)*\)?'
+        condition_match = re.match(condition_regexp, groupdict["condition"], re.IGNORECASE)
+        if not condition_match:
+            raise NotSupportedError(sql)
+        groupdict.update(condition_match.groupdict())
+
+    return groupdict
+
+
 def execute(conn: tablestore.OTSClient, sql: str, params):
     try:
-        sql = re.sub(" LIMIT \\d*$", "", sql)
-        sql = re.sub(" ORDER BY [^ ]*( (ASC|DESC))?$", "", sql)
-        select_match = re.match('SELECT (.*) FROM "([^ ]*)"(.*)$', sql)
-        if not select_match:
-            raise ValueError()
+        parsed_sql = parse_select(sql)
 
-        if not select_match.group(3):
-            condition_column = None
-        else:
-            where_match = re.match(' WHERE ".*?"\\."(.*?)" (.*)', select_match.group(3))
-            if not where_match:
-                raise ValueError()
-
-            condition_column = where_match.group(1)
-            if not re.match("(= %s)|(IN \\(%s(, ?%s)*\\))$", where_match.group(2)):
-                raise ValueError()
-
-    except ValueError:
+    except NotSupportedError:
         result = run_any_select(conn, sql, params)
         return {"rowcount": len(result), "result": iter(result)}
 
-    table_name = select_match.group(2)
-    columns = [re.sub(".*\\.", "", column)[1:-1] for column in select_match.group(1).split(", ")]
+    table_name = parsed_sql["table"]
+    condition_column = parsed_sql.get("condition_column")
+    columns = [re.sub(".*\\.", "", column)[1:-1] for column in parsed_sql["columns"]]
     if condition_column == "id" and len(params) == 1:
         # Get row by id
         _, row, _ = conn.get_row(table_name, [("_partition", 0), ("id", params[0])])
@@ -102,9 +118,7 @@ def execute(conn: tablestore.OTSClient, sql: str, params):
         request = tablestore.BatchGetRowRequest()
         request.add(
             tablestore.TableInBatchGetRowItem(
-                table_name,
-                [[("_partition", 0), ("id", param)] for param in params],
-                max_version=1
+                table_name, [[("_partition", 0), ("id", param)] for param in params], max_version=1
             )
         )
 
@@ -128,9 +142,13 @@ def execute(conn: tablestore.OTSClient, sql: str, params):
             [("_partition", 0), ("id", tablestore.INF_MAX)],
         )
 
-    result = []
-    for row in row_list:
-        row_dict = row_as_dict(row)
-        result.append([row_dict.get(column, None) for column in columns])
+    row_dicts = [row_as_dict(row) for row in row_list]
+    if parsed_sql["order_column"]:
+        order_column = re.sub(".*\\.", "", parsed_sql["order_column"])[1:-1]
+        row_dicts.sort(
+            key=lambda row: row.get(order_column, None),
+            reverse=parsed_sql["order_direction"] == "DESC",
+        )
+    result = [[row.get(column, None) for column in columns] for row in row_dicts]
 
     return {"rowcount": len(result), "result": iter(result)}
