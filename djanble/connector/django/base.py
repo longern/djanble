@@ -1,4 +1,3 @@
-import tablestore
 from django.db.backends.base.base import BaseDatabaseWrapper
 from django.db.backends.base.client import BaseDatabaseClient
 from django.db.backends.base.creation import BaseDatabaseCreation
@@ -9,7 +8,7 @@ from django.db.backends.base.schema import BaseDatabaseSchemaEditor
 from django.db.backends.sqlite3.base import Database
 from django.db.backends.sqlite3.base import DatabaseWrapper as Sqlite3DatabaseWrapper
 
-from .cursor import Cursor
+from djanble.dbapi2 import connect, Cursor
 
 
 def do_nothing(*args, **kwargs):
@@ -47,22 +46,20 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     SchemaEditorClass = BaseDatabaseSchemaEditor
 
     def get_connection_params(self) -> None:
-        settings_dict: dict = self.settings_dict
-        protocol = "https"
         kwargs = {
-            "end_point": f"{protocol}://{settings_dict['HOST']}",
-            "access_key_id": self.settings_dict["USER"],
-            "access_key_secret": self.settings_dict["PASSWORD"],
-            "instance_name": self.settings_dict["NAME"],
+            "host": self.settings_dict["HOST"],
+            "user": self.settings_dict["USER"],
+            "password": self.settings_dict["PASSWORD"],
+            "db": self.settings_dict["NAME"],
         }
         return kwargs
 
     def get_new_connection(self, conn_params):
-        self.conn = tablestore.OTSClient(**conn_params)
+        self.conn = connect(**conn_params)
         return self.conn
 
     def create_cursor(self, name=None) -> Cursor:
-        return Cursor(self.conn)
+        return self.conn.cursor()
 
     def rollback(self) -> None:
         self.needs_rollback = False

@@ -8,8 +8,8 @@ class Cursor:
     https://www.python.org/dev/peps/pep-0249/
     """
 
-    def __init__(self, conn):
-        self.conn: tablestore.OTSClient = conn
+    def __init__(self, conn: "Connection"):
+        self.conn = conn
         self.rowcount = -1
 
     def execute(self, sql: str, params=None):
@@ -43,3 +43,22 @@ class Cursor:
 
     def close(self):
         pass
+
+
+class Connection(tablestore.OTSClient):
+    def __init__(self, host, user, password, db):
+        protocol = "https"
+        kwargs = {
+            "end_point": f"{protocol}://{host}",
+            "access_key_id": user,
+            "access_key_secret": password,
+            "instance_name": db,
+        }
+        super().__init__(**kwargs)
+
+    def cursor(self) -> Cursor:
+        return Cursor(self)
+
+
+def connect(host, user, password, db):
+    return Connection(host, user, password, db)
