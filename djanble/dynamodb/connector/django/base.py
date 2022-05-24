@@ -5,7 +5,6 @@ from django.db.backends.base.features import BaseDatabaseFeatures
 from django.db.backends.base.introspection import BaseDatabaseIntrospection
 from django.db.backends.base.operations import BaseDatabaseOperations
 from django.db.backends.base.schema import BaseDatabaseSchemaEditor
-from django.db.backends.sqlite3.base import DatabaseWrapper as Sqlite3DatabaseWrapper
 
 from djanble.dynamodb import dbapi2 as Database
 
@@ -40,7 +39,23 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     ops_class = DatabaseOperations
 
     Database = Database
-    operators = Sqlite3DatabaseWrapper.operators
+
+    operators = {
+        "exact": "= %s",
+        "iexact": "LIKE %s ESCAPE '\\'",
+        "contains": "LIKE %s ESCAPE '\\'",
+        "icontains": "LIKE %s ESCAPE '\\'",
+        "regex": "REGEXP %s",
+        "iregex": "REGEXP '(?i)' || %s",
+        "gt": "> %s",
+        "gte": ">= %s",
+        "lt": "< %s",
+        "lte": "<= %s",
+        "startswith": "LIKE %s ESCAPE '\\'",
+        "endswith": "LIKE %s ESCAPE '\\'",
+        "istartswith": "LIKE %s ESCAPE '\\'",
+        "iendswith": "LIKE %s ESCAPE '\\'",
+    }
 
     SchemaEditorClass = BaseDatabaseSchemaEditor
 
