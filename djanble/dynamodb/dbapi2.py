@@ -1,6 +1,15 @@
+import datetime
 import re
 
 import boto3
+
+Date = datetime.date
+
+Time = datetime.time
+
+Timestamp = datetime.datetime
+
+Binary = memoryview
 
 
 class Cursor:

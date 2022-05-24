@@ -1,5 +1,15 @@
+import datetime
 import importlib
+
 import tablestore
+
+Date = datetime.date
+
+Time = datetime.time
+
+Timestamp = datetime.datetime
+
+Binary = memoryview
 
 
 class Cursor:
