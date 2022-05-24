@@ -5,10 +5,8 @@ from django.db.backends.base.features import BaseDatabaseFeatures
 from django.db.backends.base.introspection import BaseDatabaseIntrospection
 from django.db.backends.base.operations import BaseDatabaseOperations
 from django.db.backends.base.schema import BaseDatabaseSchemaEditor
-from django.db.backends.sqlite3.base import Database
+from djanble.tablestore import dbapi2 as Database
 from django.db.backends.sqlite3.base import DatabaseWrapper as Sqlite3DatabaseWrapper
-
-from djanble.dbapi2 import connect, Cursor
 
 
 def do_nothing(*args, **kwargs):
@@ -16,7 +14,7 @@ def do_nothing(*args, **kwargs):
 
 
 class DatabaseIntrospection(BaseDatabaseIntrospection):
-    def table_names(self, cursor: Cursor, include_views=False):
+    def table_names(self, cursor: Database.Cursor, include_views=False):
         return cursor.conn.list_table()
 
 
@@ -55,10 +53,10 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         return kwargs
 
     def get_new_connection(self, conn_params):
-        self.conn = connect(**conn_params)
+        self.conn = Database.connect(**conn_params)
         return self.conn
 
-    def create_cursor(self, name=None) -> Cursor:
+    def create_cursor(self, name=None) -> Database.Cursor:
         return self.conn.cursor()
 
     def rollback(self) -> None:
