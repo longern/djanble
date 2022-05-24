@@ -7,7 +7,7 @@ from django.db.backends.base.operations import BaseDatabaseOperations
 from django.db.backends.base.schema import BaseDatabaseSchemaEditor
 from django.db.backends.sqlite3.base import DatabaseWrapper as Sqlite3DatabaseWrapper
 
-from djanble.tablestore import dbapi2 as Database
+from djanble.dynamodb import dbapi2 as Database
 
 
 def do_nothing(*args, **kwargs):
@@ -16,7 +16,7 @@ def do_nothing(*args, **kwargs):
 
 class DatabaseIntrospection(BaseDatabaseIntrospection):
     def table_names(self, cursor: Database.Cursor, include_views=False):
-        return cursor.conn.list_table()
+        return cursor.conn.client.list_tables()["TableNames"]
 
 
 class DatabaseOperations(BaseDatabaseOperations):
