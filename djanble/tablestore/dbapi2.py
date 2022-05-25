@@ -11,6 +11,20 @@ Timestamp = datetime.datetime
 
 Binary = memoryview
 
+# Exceptions
+class Error(Exception):
+    pass
+
+
+DataError = type("DataError", (Error,), {})
+DatabaseError = type("DatabaseError", (Error,), {})
+IntegrityError = type("IntegrityError", (Error,), {})
+InterfaceError = type("InterfaceError", (Error,), {})
+InternalError = type("InternalError", (Error,), {})
+NotSupportedError = type("NotSupportedError", (Error,), {})
+OperationalError = type("OperationalError", (Error,), {})
+ProgrammingError = type("ProgrammingError", (Error,), {})
+
 
 class Cursor:
     """
