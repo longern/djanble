@@ -1,4 +1,5 @@
 import datetime
+import importlib
 import re
 
 import boto3
@@ -49,9 +50,21 @@ class Cursor:
             self._description_columns = [
                 column.split(".")[-1].strip().strip('"') for column in columns_segment.split(",")
             ]
+            sql = re.sub('"[0-9_A-Za-z]+"\.', "", sql)
+            # LIMIT clause is not supported
+            sql = re.sub('LIMIT\s+\d+', "", sql)
 
-        print(sql)
-        result = self.conn.client.execute_statement(Statement=sql)["Items"]
+        try:
+            statement = sql.split()[0].lower()
+            module = importlib.import_module(f"..queries.{statement}", package=__name__)
+            retval = module.execute(self.conn, sql, params) or {}
+            for key, value in retval.items():
+                setattr(self, key, value)
+            return
+        except ModuleNotFoundError:
+            pass
+
+        result = self.conn.client.execute_statement(Statement=sql % params)["Items"]
 
         if self._description_columns:
             result = [tuple(list(row[column].values())[0] for column in self._description_columns) for row in result]

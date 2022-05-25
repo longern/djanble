@@ -40,6 +40,36 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
     Database = Database
 
+    data_types = {
+        "AutoField": "NUMBER",
+        "BigAutoField": "NUMBER",
+        "BinaryField": "BINARY",
+        "BooleanField": "NUMBER",
+        "CharField": "STRING",
+        "DateField": "STRING",
+        "DateTimeField": "STRING",
+        "DecimalField": "NUMBER",
+        "DurationField": "NUMBER",
+        "FileField": "STRING",
+        "FilePathField": "STRING",
+        "FloatField": "NUMBER",
+        "IntegerField": "NUMBER",
+        "BigIntegerField": "NUMBER",
+        "IPAddressField": "STRING",
+        "GenericIPAddressField": "STRING",
+        "JSONField": "STRING",
+        "OneToOneField": "NUMBER",
+        "PositiveBigIntegerField": "NUMBER",
+        "PositiveIntegerField": "NUMBER",
+        "PositiveSmallIntegerField": "NUMBER",
+        "SlugField": "STRING",
+        "SmallAutoField": "NUMBER",
+        "SmallIntegerField": "NUMBER",
+        "TextField": "STRING",
+        "TimeField": "STRING",
+        "UUIDField": "STRING",
+    }
+
     operators = {
         "exact": "= %s",
         "iexact": "LIKE %s ESCAPE '\\'",
